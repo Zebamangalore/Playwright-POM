@@ -1,0 +1,27 @@
+# Create / update .gitignore
+cat >> .gitignore << 'EOF'
+# Python virtual environment — never commit this
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Playwright browsers — installed by CI via `playwright install`
+# (located inside venv, already covered above, but explicit is safer)
+**/playwright/driver/
+
+# Test reports — generated fresh each run
+reports/
+
+# Environment variables — never commit secrets
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+EOF
