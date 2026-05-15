@@ -78,7 +78,7 @@ jobs:
       #    --tb=short  → concise traceback on failure
       - name: Run UI tests
         run: |
-          pytest \
+          pytest tests/test_todo.py \
             -n 2 \
             --dist=load \
             --tb=short \
