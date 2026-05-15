@@ -1,0 +1,118 @@
+# ══════════════════════════════════════════════════════════════════════
+#  UI TEST PIPELINE — Playwright + pytest-xdist
+#  Triggers: push/PR to main & develop
+#  Jobs:     install → test (chromium + firefox in parallel) → report
+# ══════════════════════════════════════════════════════════════════════
+
+name: UI Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:           # allows manual trigger from GitHub UI
+
+# ── Cancel in-progress runs on the same branch ────────────────────────
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  BASE_URL:  ${{ secrets.BASE_URL  || 'https://demo.playwright.dev/todomvc' }}
+  HEADLESS:  "true"
+  BROWSER:   "chromium,firefox"             # drives BROWSERS list in config.py
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════
+  # JOB 1 — Run UI Tests
+  # ════════════════════════════════════════════════════════════════════
+  ui-tests:
+    name: UI Tests — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false                      # don't cancel sibling jobs on failure
+      matrix:
+        os: [ubuntu-latest]                 # add macos-latest / windows-latest if needed
+
+    steps:
+
+      # ── 1. Checkout ─────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python ────────────────────────────────────────────
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip                        # caches ~/.cache/pip between runs
+
+      # ── 3. Install Python dependencies ──────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── 4. Install Playwright browsers ──────────────────────────────
+      #    Only installs chromium + firefox (matches BROWSER env var)
+      #    Add --with-deps to install OS-level dependencies on Linux
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium firefox --with-deps
+
+      # ── 5. Create report directories ────────────────────────────────
+      - name: Create report directories
+        run: |
+          mkdir -p reports/screenshots
+          mkdir -p reports/traces
+          mkdir -p reports/html
+
+      # ── 6. Run tests in parallel ─────────────────────────────────────
+      #    -n 2        → 2 workers (one per browser)
+      #    --dist=load → interleave chromium+firefox simultaneously
+      #    --html      → generates HTML report
+      #    --tb=short  → concise traceback on failure
+      - name: Run UI tests
+        run: |
+          pytest \
+            -n 2 \
+            --dist=load \
+            --tb=short \
+            -v \
+            --html=reports/html/report.html \
+            --self-contained-html
+        env:
+          BASE_URL: ${{ env.BASE_URL }}
+          HEADLESS: ${{ env.HEADLESS }}
+          BROWSER:  ${{ env.BROWSER  }}
+
+      # ── 7. Upload HTML report ─────────────────────────────────────────
+      - name: Upload HTML report
+        if: always()                        # upload even if tests fail
+        uses: actions/upload-artifact@v4
+        with:
+          name: html-report-${{ matrix.os }}-${{ github.run_number }}
+          path: reports/html/report.html
+          retention-days: 14
+
+      # ── 8. Upload failure screenshots ────────────────────────────────
+      - name: Upload failure screenshots
+        if: failure()                       # only upload on test failure
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ matrix.os }}-${{ github.run_number }}
+          path: reports/screenshots/
+          retention-days: 7
+
+      # ── 9. Upload Playwright traces ───────────────────────────────────
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-${{ matrix.os }}-${{ github.run_number }}
+          path: reports/traces/
+          retention-days: 7

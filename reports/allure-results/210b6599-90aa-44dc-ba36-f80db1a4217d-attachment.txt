@@ -1,0 +1,6 @@
+
+  ▶ Step 1: Opening login page
+  ▶ Step 2: Entering username 'Admin'
+  ▶ Step 3: Entering password
+  ▶ Step 4: Clicking Login
+  ▶ Step 5: Verifying result = Dashboard
